@@ -1,7 +1,8 @@
+use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
-use log::{info, warn};
+use log::{debug, info, warn};
 use serde::Deserialize;
 use rand::Rng;
 use rand::rngs::ThreadRng;
@@ -58,13 +59,13 @@ fn main() {
     }
 }
 
-#[derive(Default,Clone,Eq,PartialEq)]
+#[derive(Default,Clone,Eq,PartialEq,Hash)]
 struct Position {
     x: u32,
     y: u32,
 }
 
-#[derive(Default,Clone)]
+#[derive(Default,Clone,Debug)]
 struct Walls {
     top: bool,
     right: bool,
@@ -72,6 +73,7 @@ struct Walls {
     left: bool,
 }
 
+#[derive(Clone, Debug)]
 enum MoveDirection {
     Up,
     Right,
@@ -102,7 +104,7 @@ fn get_answer(reader: &mut BufReader<TcpStream>) -> Option<Answer> {
         return None;
     }
     info!("Received answer: {}", command);
-    let mut parts = command.split("|");
+    let mut parts = command.strip_suffix("\n").unwrap().split("|");
     Some(match parts.next() {
         Some("motd") => { Answer::Motd(parts.next().unwrap_or("").to_owned()) },
         Some("error") => { Answer::Error(parts.next().unwrap_or("").to_owned()) },
@@ -165,6 +167,7 @@ struct State {
     current_pos: Option<Position>,
     current_goal: Option<Position>,
     current_walls: Option<Walls>,
+    visited_positions: HashMap<Position, Option<Position>>,
 }
 
 impl State {
@@ -172,26 +175,103 @@ impl State {
         match answer {
             Answer::Pos(p, w) => {
                 if self.current_pos.is_none() || p != self.current_pos.as_ref().unwrap() {
+                    if !self.visited_positions.contains_key(p) {
+                        self.visited_positions.insert(p.clone(), self.current_pos.clone());
+                    }
                     self.last_pos = self.current_pos.take();
                     self.current_pos = Some(p.clone());
                     self.current_walls = Some(w.clone());
+                    debug!("Current walls: {:?}", self.current_walls.as_ref().unwrap());
                 }
             },
             Answer::Goal(p) => {
+                self.reset();
                 self.current_goal.replace(p.clone());
             },
             _ => {},
         }
     }
+
+    fn reset(&mut self) {
+        self.current_pos = None;
+        self.last_pos = None;
+        self.current_walls = None;
+        self.current_goal = None;
+        self.visited_positions.clear();
+    }
 }
 
 fn decide_action(state: &State, rng: &mut ThreadRng) -> Option<Command<'static>> {
-    let r = rng.gen_range(0..4);
-    Some(Command::Move(match r {
-        0 => MoveDirection::Up,
-        1 => MoveDirection::Right,
-        2 => MoveDirection::Down,
-        3 => MoveDirection::Left,
-        _ => { panic!() },
-    }))
+    if let None = state.current_pos {
+        return None;
+    }
+
+    let valid_directions: Vec<&MoveDirection> =
+        [MoveDirection::Up, MoveDirection::Right, MoveDirection::Down, MoveDirection::Left]
+        .iter()
+        .filter(|d| !has_wall(state.current_walls.as_ref().unwrap(), d))
+        .collect();
+    debug!("Valid directions: {:?}", valid_directions);
+    let mut unvisited_valid_directions: Vec<&MoveDirection> = valid_directions.iter()
+        .filter(|d| {
+            !state.visited_positions.contains_key(
+                &move_by_direction(state.current_pos.as_ref().unwrap(), d))
+        })
+        .map(|d| *d)
+        .collect();
+    debug!("Unvisited directions: {:?}", unvisited_valid_directions);
+    if unvisited_valid_directions.is_empty() {
+        let back = state.visited_positions.get(state.current_pos.as_ref().unwrap()).unwrap();
+        if let Some(back_pos) = back {
+            info!("Stepping backwards");
+            return Some(Command::Move(direction_from_move(state.current_pos.as_ref().unwrap(), &back_pos)));
+        } else {
+            info!("No way for stepping backwards. Game seems to be over?");
+            return None;
+        }
+    }
+
+    unvisited_valid_directions.sort_by_key(|d| {
+        calculate_distance(state.current_goal.as_ref().unwrap(),
+                           &move_by_direction(state.current_pos.as_ref().unwrap(), d))
+
+    });
+
+    return Some(Command::Move(unvisited_valid_directions.into_iter().next().unwrap().clone()));
+}
+
+fn move_by_direction(pos: &Position, dir: &MoveDirection) -> Position {
+    match dir {
+        MoveDirection::Up => Position { x: pos.x, y: pos.y-1 },
+        MoveDirection::Right => Position { x: pos.x+1, y: pos.y },
+        MoveDirection::Down => Position { x: pos.x, y: pos.y+1 },
+        MoveDirection::Left => Position { x: pos.x-1, y: pos.y },
+    }
+}
+
+fn direction_from_move(pos1: &Position, pos2: &Position) -> MoveDirection {
+    if pos2.x > pos1.x {
+        MoveDirection::Right
+    } else if pos2.x < pos1.x {
+        MoveDirection::Left
+    } else if pos2.y < pos1.y {
+        MoveDirection::Up
+    } else if pos2.y > pos1.y {
+        MoveDirection::Down
+    } else {
+        panic!();
+    }
+}
+
+fn has_wall(walls: &Walls, dir: &MoveDirection) -> bool {
+    match dir {
+        MoveDirection::Up => walls.top,
+        MoveDirection::Right => walls.right,
+        MoveDirection::Down => walls.bottom,
+        MoveDirection::Left => walls.left,
+    }
+}
+
+fn calculate_distance(pos1: &Position, pos2: &Position) -> i32 {
+    (pos1.x as i32 - pos2.x as i32).abs() + (pos1.y as i32 - pos2.y as i32).abs()
 }
