@@ -245,10 +245,10 @@ fn decide_action(state: &State, rng: &mut ThreadRng) -> Option<Command<'static>>
     unvisited_valid_directions.sort_by(|a, b| {
         calculate_distance(
                 state.current_goal.as_ref().unwrap(),
-                &move_by_direction(state.current_pos.as_ref().unwrap(), b))
+                &move_by_direction(state.current_pos.as_ref().unwrap(), a))
             .partial_cmp(&calculate_distance(
                 state.current_goal.as_ref().unwrap(),
-                &move_by_direction(state.current_pos.as_ref().unwrap(), a)))
+                &move_by_direction(state.current_pos.as_ref().unwrap(), b)))
             .unwrap_or(Equal)
     });
 
@@ -297,7 +297,7 @@ fn has_wall(walls: &Walls, dir: &MoveDirection) -> bool {
 }
 
 fn calculate_distance(pos1: &Position, pos2: &Position) -> f32 {
-    ((pos1.x as f32 - pos2.x as f32) + (pos1.y as f32 - pos2.y as f32)).sqrt()
+    ((pos1.x as f32 - pos2.x as f32).powi(2) + (pos1.y as f32 - pos2.y as f32).powi(2)).sqrt()
 }
 
 fn may_have_way_to_goal(position: &Position, size: &Position, visited: &HashMap<Position, Option<Position>>, goal: &Position) -> bool {
