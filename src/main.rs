@@ -211,31 +211,38 @@ fn decide_action(state: &State, rng: &mut ThreadRng) -> Option<Command<'static>>
         return None;
     }
 
+    let walls = state.current_walls.as_ref().unwrap();
+    let pos = state.current_pos.as_ref().unwrap();
+    let goal = state.current_goal.as_ref().unwrap();
+    let size = state.start_pos.as_ref().unwrap();
+
     let valid_directions: Vec<&MoveDirection> =
         [MoveDirection::Up, MoveDirection::Right, MoveDirection::Down, MoveDirection::Left]
         .iter()
-        .filter(|d| !has_wall(state.current_walls.as_ref().unwrap(), d))
-        .filter(|d| may_have_way_to_goal(
-            &move_by_direction(state.current_pos.as_ref().unwrap(), d),
-            state.start_pos.as_ref().unwrap(),
-            &state.visited_positions,
-            state.current_goal.as_ref().unwrap())
-        )
+        .filter(|d| {
+            !has_wall(walls, d)
+        })
+        .filter(|d| {
+            may_have_way_to_goal(
+                &move_by_direction(pos, d),
+                state.start_pos.as_ref().unwrap(),
+                &state.visited_positions,
+                state.current_goal.as_ref().unwrap())
+        })
         .collect();
     debug!("Valid directions: {:?}", valid_directions);
     let mut unvisited_valid_directions: Vec<&MoveDirection> = valid_directions.iter()
         .filter(|d| {
-            !state.visited_positions.contains_key(
-                &move_by_direction(state.current_pos.as_ref().unwrap(), d))
+            !state.visited_positions.contains_key(&move_by_direction(pos, d))
         })
         .map(|d| *d)
         .collect();
     debug!("Unvisited directions: {:?}", unvisited_valid_directions);
     if unvisited_valid_directions.is_empty() {
-        let back = state.visited_positions.get(state.current_pos.as_ref().unwrap()).unwrap();
+        let back = state.visited_positions.get(pos).unwrap();
         if let Some(back_pos) = back {
             info!("Stepping backwards");
-            return Some(Command::Move(direction_from_move(state.current_pos.as_ref().unwrap(), &back_pos)));
+            return Some(Command::Move(direction_from_move(pos, &back_pos)));
         } else {
             info!("No way for stepping backwards. Game seems to be over?");
             return None;
@@ -243,12 +250,8 @@ fn decide_action(state: &State, rng: &mut ThreadRng) -> Option<Command<'static>>
     }
 
     unvisited_valid_directions.sort_by(|a, b| {
-        calculate_distance(
-                state.current_goal.as_ref().unwrap(),
-                &move_by_direction(state.current_pos.as_ref().unwrap(), a))
-            .partial_cmp(&calculate_distance(
-                state.current_goal.as_ref().unwrap(),
-                &move_by_direction(state.current_pos.as_ref().unwrap(), b)))
+        calculate_position_heuristic(&move_by_direction(pos, a), goal, size)
+            .partial_cmp(&calculate_position_heuristic(&move_by_direction(pos, b), goal, size))
             .unwrap_or(Equal)
     });
 
@@ -299,6 +302,14 @@ fn has_wall(walls: &Walls, dir: &MoveDirection) -> bool {
 fn calculate_distance(pos1: &Position, pos2: &Position) -> f32 {
     ((pos1.x as f32 - pos2.x as f32).powi(2) + (pos1.y as f32 - pos2.y as f32).powi(2)).sqrt()
 }
+
+fn calculate_position_heuristic(pos: &Position, goal: &Position, size: &Position) -> f32 {
+    let playground_diagonal = ((size.x as f32).powi(2) + (size.y as f32).powi(2)).sqrt();
+    let offset_from_diag = (pos.x as f32 - pos.y as f32).abs() / (playground_diagonal/2f32);
+    let distance_to_goal = calculate_distance(pos, goal) / playground_diagonal;
+    (offset_from_diag + distance_to_goal) / 2f32
+}
+
 
 fn may_have_way_to_goal(position: &Position, size: &Position, visited: &HashMap<Position, Option<Position>>, goal: &Position) -> bool {
     if position == goal {
