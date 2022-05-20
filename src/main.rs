@@ -104,7 +104,7 @@ fn get_answer(reader: &mut BufReader<TcpStream>) -> Option<Answer> {
         return None;
     }
     info!("Received answer: {}", command);
-    let mut parts = command.strip_suffix("\n").unwrap().split("|");
+    let mut parts = command.trim().split("|");
     Some(match parts.next() {
         Some("motd") => { Answer::Motd(parts.next().unwrap_or("").to_owned()) },
         Some("error") => { Answer::Error(parts.next().unwrap_or("").to_owned()) },
