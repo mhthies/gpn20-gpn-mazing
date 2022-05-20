@@ -1,5 +1,5 @@
 use std::cmp::Ordering::Equal;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
@@ -165,6 +165,7 @@ fn send_command(stream: &mut TcpStream, command: &Command) {
 #[derive(Default)]
 struct State {
     last_pos: Option<Position>,
+    start_pos: Option<Position>,
     current_pos: Option<Position>,
     current_goal: Option<Position>,
     current_walls: Option<Walls>,
@@ -175,6 +176,9 @@ impl State {
     fn update_from_answer(&mut self, answer: &Answer) {
         match answer {
             Answer::Pos(p, w) => {
+                if self.current_pos.is_none() {
+                    self.start_pos = Some(p.clone());
+                };
                 if self.current_pos.is_none() || p != self.current_pos.as_ref().unwrap() {
                     if !self.visited_positions.contains_key(p) {
                         self.visited_positions.insert(p.clone(), self.current_pos.clone());
@@ -211,6 +215,12 @@ fn decide_action(state: &State, rng: &mut ThreadRng) -> Option<Command<'static>>
         [MoveDirection::Up, MoveDirection::Right, MoveDirection::Down, MoveDirection::Left]
         .iter()
         .filter(|d| !has_wall(state.current_walls.as_ref().unwrap(), d))
+        .filter(|d| may_have_way_to_goal(
+            &move_by_direction(state.current_pos.as_ref().unwrap(), d),
+            state.start_pos.as_ref().unwrap(),
+            &state.visited_positions,
+            state.current_goal.as_ref().unwrap())
+        )
         .collect();
     debug!("Valid directions: {:?}", valid_directions);
     let mut unvisited_valid_directions: Vec<&MoveDirection> = valid_directions.iter()
@@ -254,6 +264,15 @@ fn move_by_direction(pos: &Position, dir: &MoveDirection) -> Position {
     }
 }
 
+fn is_move_over_playground_border(pos: &Position, dir: &MoveDirection, size: &Position) -> bool {
+    match dir {
+        MoveDirection::Up => pos.y == 0,
+        MoveDirection::Right => pos.x >= size.x,
+        MoveDirection::Down => pos.y >= size.y,
+        MoveDirection::Left => pos.x == 0,
+    }
+}
+
 fn direction_from_move(pos1: &Position, pos2: &Position) -> MoveDirection {
     if pos2.x > pos1.x {
         MoveDirection::Right
@@ -279,4 +298,30 @@ fn has_wall(walls: &Walls, dir: &MoveDirection) -> bool {
 
 fn calculate_distance(pos1: &Position, pos2: &Position) -> f32 {
     ((pos1.x as f32 - pos2.x as f32) + (pos1.y as f32 - pos2.y as f32)).sqrt()
+}
+
+fn may_have_way_to_goal(position: &Position, size: &Position, visited: &HashMap<Position, Option<Position>>, goal: &Position) -> bool {
+    if position == goal {
+        return true;
+    }
+    let mut search_stack = vec![position.clone()];
+    let mut search_set: HashSet<Position> = HashSet::new();
+
+    while let Some(pos) = search_stack.pop() {
+        search_set.insert(pos.clone());
+        let search_positions = [
+            MoveDirection::Up, MoveDirection::Right, MoveDirection::Down, MoveDirection::Left
+        ].iter()
+            .filter(|d| !is_move_over_playground_border(&pos, d, size))
+            .map(|d| move_by_direction(&pos, &d))
+            .filter(|p| !search_set.contains(p))
+            .filter(|p| !visited.contains_key(p));
+        for pos in search_positions {
+            if pos == *goal {
+                return true;
+            }
+            search_stack.push(pos);
+        }
+    }
+    return false;
 }
