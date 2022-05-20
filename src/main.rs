@@ -1,3 +1,4 @@
+use std::cmp::Ordering::Equal;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
@@ -231,10 +232,14 @@ fn decide_action(state: &State, rng: &mut ThreadRng) -> Option<Command<'static>>
         }
     }
 
-    unvisited_valid_directions.sort_by_key(|d| {
-        calculate_distance(state.current_goal.as_ref().unwrap(),
-                           &move_by_direction(state.current_pos.as_ref().unwrap(), d))
-
+    unvisited_valid_directions.sort_by(|a, b| {
+        calculate_distance(
+                state.current_goal.as_ref().unwrap(),
+                &move_by_direction(state.current_pos.as_ref().unwrap(), a))
+            .partial_cmp(&calculate_distance(
+                state.current_goal.as_ref().unwrap(),
+                &move_by_direction(state.current_pos.as_ref().unwrap(), b)))
+            .unwrap_or(Equal)
     });
 
     return Some(Command::Move(unvisited_valid_directions.into_iter().next().unwrap().clone()));
@@ -272,6 +277,6 @@ fn has_wall(walls: &Walls, dir: &MoveDirection) -> bool {
     }
 }
 
-fn calculate_distance(pos1: &Position, pos2: &Position) -> i32 {
-    (pos1.x as i32 - pos2.x as i32).abs() + (pos1.y as i32 - pos2.y as i32).abs()
+fn calculate_distance(pos1: &Position, pos2: &Position) -> f32 {
+    ((pos1.x as f32 - pos2.x as f32) + (pos1.y as f32 - pos2.y as f32)).sqrt()
 }
