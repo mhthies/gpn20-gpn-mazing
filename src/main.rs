@@ -235,10 +235,10 @@ fn decide_action(state: &State, rng: &mut ThreadRng) -> Option<Command<'static>>
     unvisited_valid_directions.sort_by(|a, b| {
         calculate_distance(
                 state.current_goal.as_ref().unwrap(),
-                &move_by_direction(state.current_pos.as_ref().unwrap(), a))
+                &move_by_direction(state.current_pos.as_ref().unwrap(), b))
             .partial_cmp(&calculate_distance(
                 state.current_goal.as_ref().unwrap(),
-                &move_by_direction(state.current_pos.as_ref().unwrap(), b)))
+                &move_by_direction(state.current_pos.as_ref().unwrap(), a)))
             .unwrap_or(Equal)
     });
 
