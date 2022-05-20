@@ -20,9 +20,15 @@ struct UserConfig {
 }
 
 #[derive(Deserialize)]
+struct AlgorithmConfig {
+    heuristic_cut: f32,
+}
+
+#[derive(Deserialize)]
 struct Config {
     server: ServerConfig,
     user: UserConfig,
+    algorithm: AlgorithmConfig,
 }
 
 
@@ -54,7 +60,7 @@ fn main() {
                 },
             }
         }
-        if let Some(command) = decide_action(&state, &mut rng) {
+        if let Some(command) = decide_action(&state, &mut rng, &config.algorithm) {
             send_command(&mut tcp_stream, &command);
         }
     }
@@ -206,7 +212,7 @@ impl State {
     }
 }
 
-fn decide_action(state: &State, rng: &mut ThreadRng) -> Option<Command<'static>> {
+fn decide_action(state: &State, rng: &mut ThreadRng, config: &AlgorithmConfig) -> Option<Command<'static>> {
     if let None = state.current_pos {
         return None;
     }
@@ -229,6 +235,7 @@ fn decide_action(state: &State, rng: &mut ThreadRng) -> Option<Command<'static>>
                 &state.visited_positions,
                 state.current_goal.as_ref().unwrap())
         })
+        .filter(|d| calculate_position_heuristic(&move_by_direction(pos, d), goal, size) <= config.heuristic_cut)
         .collect();
     debug!("Valid directions: {:?}", valid_directions);
     let mut unvisited_valid_directions: Vec<&MoveDirection> = valid_directions.iter()
