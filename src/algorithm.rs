@@ -146,11 +146,11 @@ fn calculate_position_heuristic(pos: &Position, goal: &Position, size: &Position
 
 
 fn explore_space_to_goal(position: &Position, size: &Position, visited: &HashMap<Position, Option<Position>>, goal: &Position) -> (Option<u32>, u32) {
-    let mut search_stack = VecDeque::from(vec![(position.clone(), 0)]);
+    let mut search_queue = VecDeque::from(vec![(position.clone(), 0)]);
     let mut search_set: HashSet<Position> = HashSet::new();
+    search_set.insert(position.clone());
 
-    while let Some((pos, count)) = search_stack.pop_front() {
-        search_set.insert(pos.clone());
+    while let Some((pos, count)) = search_queue.pop_front() {
         if pos == *goal {
             let size_of_space = search_set.len() as u32;
             return (Some(count), size_of_space);
@@ -160,10 +160,12 @@ fn explore_space_to_goal(position: &Position, size: &Position, visited: &HashMap
         ].iter()
             .filter(|d| !helper::is_move_over_playground_border(&pos, d, size))
             .map(|d| helper::move_by_direction(&pos, &d))
-            .filter(|p| !search_set.contains(p))
             .filter(|p| !visited.contains_key(p));
         for p in search_positions {
-            search_stack.push_back((p, count + 1));
+            if !search_set.contains(&p) {
+                search_set.insert(p.clone());
+                search_queue.push_back((p, count + 1));
+            }
         }
     }
     let size_of_space = search_set.len() as u32;
