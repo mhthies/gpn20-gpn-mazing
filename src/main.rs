@@ -1,9 +1,11 @@
 use std::cmp::Ordering::Equal;
 use std::collections::{HashMap, HashSet};
-use std::fs;
+use std::{fs, thread, time};
+use std::fs::read;
 use std::io::{BufRead, BufReader, Write};
+use std::io;
 use std::net::TcpStream;
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use serde::Deserialize;
 use rand::Rng;
 use rand::rngs::ThreadRng;
@@ -31,6 +33,15 @@ struct Config {
     algorithm: AlgorithmConfig,
 }
 
+fn get_connection(config: &ServerConfig) -> TcpStream {
+    loop {
+        match TcpStream::connect(&config.address) {
+            Ok(s) => return s,
+            Err(e) => println!("{}", e)
+        }
+        thread::sleep(time::Duration::from_millis(200));
+    }
+}
 
 fn main() {
     env_logger::init();
@@ -38,16 +49,23 @@ fn main() {
     let config_file = "config.toml";
     let config_string = fs::read_to_string(config_file).unwrap();
     let config: Config = toml::from_str(&config_string).unwrap();
-
-    let mut tcp_stream = TcpStream::connect(config.server.address).unwrap();
-    let mut reader = BufReader::new(tcp_stream.try_clone().unwrap());
     let mut rng = rand::thread_rng();
-
-    send_command(&mut tcp_stream, &Command::Join(&config.user.user, &config.user.password));
-
-    let mut state = State::default();
     loop {
-        if let Some(answer) = get_answer(&mut reader) {
+        let mut stream = get_connection(&config.server);
+        let mut reader = BufReader::new(stream.try_clone().unwrap());
+        send_command(&mut stream, &Command::Join(&config.user.user, &config.user.password));
+        let res = game_loop(&config.algorithm, &mut stream, &mut reader, &mut rng);
+        if let Err(e) = res {
+            error!("IO error: {}", e);
+        }
+    }
+}
+
+fn game_loop(config: &AlgorithmConfig, stream: &mut TcpStream, stream_reader: &mut BufReader<TcpStream>, rng: &mut ThreadRng) -> io::Result<()> {
+    let mut state = State::default();
+    info!("Starting game loop.");
+    loop {
+        if let Some(answer) = get_answer(stream_reader)? {
             match answer {
                 Answer::Motd(msg) => {
                     warn!("Message of the day: {}", msg);
@@ -60,8 +78,8 @@ fn main() {
                 },
             }
         }
-        if let Some(command) = decide_action(&state, &mut rng, &config.algorithm) {
-            send_command(&mut tcp_stream, &command);
+        if let Some(command) = decide_action(&state, rng, config) {
+            send_command(stream, &command)?;
         }
     }
 }
@@ -103,24 +121,20 @@ enum Answer {
     Lose(u32, u32),
 }
 
-fn get_answer(reader: &mut BufReader<TcpStream>) -> Option<Answer> {
+fn get_answer(reader: &mut BufReader<TcpStream>) -> io::Result<Option<Answer>> {
     let mut command = String::new();
-    let status = reader.read_line(&mut command);
-    if status.is_err() {
-        warn!("Error while reading: {}", status.err().unwrap().to_string());
-        return None;
-    }
-    info!("Received answer: {}", command);
+    reader.read_line(&mut command)?;
+    debug!("Received answer: {}", command.trim());
     let mut parts = command.trim().split("|");
-    Some(match parts.next() {
-        Some("motd") => { Answer::Motd(parts.next().unwrap_or("").to_owned()) },
-        Some("error") => { Answer::Error(parts.next().unwrap_or("").to_owned()) },
-        Some("goal") => { Answer::Goal(Position {
+    Ok(match parts.next().unwrap() {
+        "motd" => { Some(Answer::Motd(parts.next().unwrap_or("").to_owned())) },
+        "error" => { Some(Answer::Error(parts.next().unwrap_or("").to_owned())) },
+        "goal" => { Some(Answer::Goal(Position {
             x: parts.next().unwrap_or("0").parse().unwrap_or(0),
             y: parts.next().unwrap_or("0").parse().unwrap_or(0)
-        }) },
-        Some("pos") => {
-            Answer::Pos(
+        })) },
+        "pos" => {
+            Some(Answer::Pos(
                 Position {
                     x: parts.next().unwrap_or("0").parse().unwrap_or(0),
                     y: parts.next().unwrap_or("0").parse().unwrap_or(0)
@@ -131,22 +145,25 @@ fn get_answer(reader: &mut BufReader<TcpStream>) -> Option<Answer> {
                     bottom: parts.next().unwrap_or("0") == "1",
                     left: parts.next().unwrap_or("0") == "1",
                 }
-            )
+            ))
         },
-        Some("win") => {
-            Answer::Win(parts.next().unwrap_or("0").parse().unwrap_or(0),
-                        parts.next().unwrap_or("0").parse().unwrap_or(0))
+        "win" => {
+            Some(Answer::Win(parts.next().unwrap_or("0").parse().unwrap_or(0),
+                             parts.next().unwrap_or("0").parse().unwrap_or(0)))
         },
-        Some("lose") => {
-            Answer::Lose(parts.next().unwrap_or("0").parse().unwrap_or(0),
-                         parts.next().unwrap_or("0").parse().unwrap_or(0))
+        "lose" => {
+            Some(Answer::Lose(parts.next().unwrap_or("0").parse().unwrap_or(0),
+                              parts.next().unwrap_or("0").parse().unwrap_or(0)))
         },
-        Some(x) => { panic!("Received unknown command {}!", x); }
-        _ => { return None; }
+        "" => { None },
+        x => {
+            warn!("Unkown message from server: {}", x);
+            None
+        }
     })
 }
 
-fn send_command(stream: &mut TcpStream, command: &Command) {
+fn send_command(stream: &mut TcpStream, command: &Command) -> io::Result<()> {
     let data = match command {
         Command::Join(user, password) => format!("join|{}|{}\n", user, password),
         Command::Move(direction) => format!("move|{}\n", match direction {
@@ -157,14 +174,10 @@ fn send_command(stream: &mut TcpStream, command: &Command) {
         }),
         Command::Chat(msg) => format!("chat|{}\n", msg),
     };
-    info!("Sending command: {}", data);
-    stream.write(data.as_bytes()).unwrap_or_else(|e| {
-        warn!("Could not write data: {}", e.to_string());
-        0
-    });
-    stream.flush().unwrap_or_else(|e| {
-        warn!("Could not flush written data: {}", e.to_string());
-    });
+    debug!("Sending command: {}", data.trim());
+    stream.write(data.as_bytes())?;
+    stream.flush()?;
+    Ok(())
 }
 
 
