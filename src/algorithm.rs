@@ -64,7 +64,7 @@ pub fn decide_action(state: &State, rng: &mut ThreadRng, config: &AlgorithmConfi
     let start = state.start_pos.as_ref().unwrap();
     let size = Position{ x: start.y, y: start.y };
 
-    let valid_directions: Vec<(&MoveDirection, Position, Option<u32>, f32)> =
+    let valid_directions: Vec<(&MoveDirection, Position, bool, f32)> =
         [MoveDirection::Up, MoveDirection::Right, MoveDirection::Down, MoveDirection::Left]
         .iter()
         .filter(|d| {
@@ -72,18 +72,16 @@ pub fn decide_action(state: &State, rng: &mut ThreadRng, config: &AlgorithmConfi
         })
         .map(|d| {
             let p = move_by_direction(pos, d);
-            let way = possible_way_to_goal(&p, &size, &state.visited_positions, goal);
-            info!("Way length: {:?}", way);
-            let heuristic = calculate_position_heuristic(&p, goal, &size, way);
-            (d, p, way, heuristic)
+            let (way, size_of_space) = explore_space_for_goal(&p, &size, &state.visited_positions, goal);
+            debug!("Way length: {:?}, Size of Space: {}", way, size_of_space);
+            let heuristic = calculate_position_heuristic(&p, goal, &size, way, size_of_space);
+            (d, p, way.is_some(), heuristic)
         })
-        .filter(|(_d, _pos, way, _heuristic)| {
-            way.is_some()
-        })
+        .filter(|(_d, _pos, way, _heuristic)| { *way })
         .filter(|(_d, _pos, _way, heuristic)| *heuristic <= config.heuristic_cut)
         .collect();
     // debug!("Valid directions: {:?}", valid_directions);
-    let mut unvisited_valid_directions:Vec<(&MoveDirection, Position, Option<u32>, f32)> = valid_directions.iter()
+    let mut unvisited_valid_directions:Vec<(&MoveDirection, Position, bool, f32)> = valid_directions.iter()
         .filter(|(_d, pos, _way, _heuristic)| {
             !state.visited_positions.contains_key(pos)
         })
@@ -109,7 +107,7 @@ pub fn decide_action(state: &State, rng: &mut ThreadRng, config: &AlgorithmConfi
     return Some(Command::Move(unvisited_valid_directions.into_iter().next().unwrap().0.clone()));
 }
 
-fn calculate_position_heuristic(pos: &Position, goal: &Position, size: &Position, potential_way_length: Option<u32>) -> f32 {
+fn calculate_position_heuristic(pos: &Position, goal: &Position, size: &Position, potential_way_length: Option<u32>, size_of_space: u32) -> f32 {
     let playground_diagonal = ((size.x as f32).powi(2) + (size.y as f32).powi(2)).sqrt();
     let offset_from_diag = (pos.x as f32 - pos.y as f32).abs() / (playground_diagonal/2f32);
     let distance_to_goal = helper::calculate_distance(pos, goal) / playground_diagonal;
@@ -119,18 +117,21 @@ fn calculate_position_heuristic(pos: &Position, goal: &Position, size: &Position
     };
     info!("Goal: {}, Diag: {}, way: {}", offset_from_diag, distance_to_goal, way_length);
 
-    distance_to_goal * 0.5 + way_length * 0.5
+    0.5 * distance_to_goal + 0.5 * way_length / (size_of_space as f32).sqrt()
 }
 
 
-fn possible_way_to_goal(position: &Position, size: &Position, visited: &HashMap<Position, Option<Position>>, goal: &Position) -> Option<u32> {
-    if position == goal {
-        return Some(0);
-    }
+fn explore_space_for_goal(position: &Position, size: &Position, visited: &HashMap<Position, Option<Position>>, goal: &Position) -> (Option<u32>, u32) {
     let mut search_stack = vec![(position.clone(), 0)];
     let mut search_set: HashSet<Position> = HashSet::new();
 
+    let mut way_to_goal: Option<u32> = None;
     while let Some((pos, count)) = search_stack.pop() {
+        if pos == *goal {
+            if way_to_goal.is_none() || way_to_goal.unwrap() > count + 1 {
+                way_to_goal.replace(count + 1);
+            }
+        }
         search_set.insert(pos.clone());
         let search_positions = [
             MoveDirection::Up, MoveDirection::Right, MoveDirection::Down, MoveDirection::Left
@@ -139,12 +140,10 @@ fn possible_way_to_goal(position: &Position, size: &Position, visited: &HashMap<
             .map(|d| helper::move_by_direction(&pos, &d))
             .filter(|p| !search_set.contains(p))
             .filter(|p| !visited.contains_key(p));
-        for pos in search_positions {
-            if pos == *goal {
-                return Some(count + 1);
-            }
-            search_stack.push((pos, count + 1));
+        for p in search_positions {
+            search_stack.push((p, count + 1));
         }
     }
-    return None;
+    let size_of_space = search_set.len() as u32;
+    return (way_to_goal, size_of_space);
 }
