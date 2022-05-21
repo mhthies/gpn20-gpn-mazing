@@ -81,6 +81,9 @@ pub fn game_loop(config: &Config, stream: &mut TcpStream, stream_reader: &mut Bu
                 },
                 Answer::Error(msg) => {
                     warn!("Error from Server: {}", msg);
+                    if msg.contains("kicked") {
+                        return Err(io::Error::from(io::ErrorKind::Other));
+                    }
                 },
                 Answer::Win(_, _) => {
                     warn!("We won!");
