@@ -59,7 +59,7 @@ impl State {
 }
 
 pub fn decide_action(state: &mut State, rng: &mut ThreadRng, config: &AlgorithmConfig) -> Option<Command<'static>> {
-    if let None = state.current_pos {
+    if state.current_pos.is_none() || state.current_goal.is_none() {
         return None;
     }
 
