@@ -75,7 +75,6 @@ pub fn decide_action(state: &State, rng: &mut ThreadRng, config: &AlgorithmConfi
             let (way, size_of_space) = explore_space_for_goal(&p, &size, &state.visited_positions, goal);
             debug!("Way length: {:?}, Size of Space: {}", way, size_of_space);
             let heuristic = calculate_position_heuristic(&p, goal, &size, way, size_of_space);
-            info!("Heuristic is {}", heuristic);
             (d, p, way.is_some(), heuristic)
         })
         .filter(|(_d, _pos, way, _heuristic)| { *way })
@@ -104,6 +103,13 @@ pub fn decide_action(state: &State, rng: &mut ThreadRng, config: &AlgorithmConfi
         a.3.partial_cmp(&b.3).unwrap_or(Equal)
     });
     info!("Heuristic: {}", unvisited_valid_directions[0].3);
+    debug!("All heuristics: [{}]",
+        unvisited_valid_directions.iter()
+        .map(|(_d, _pos, _way, heuristic)| {
+            heuristic.to_string()
+        })
+        .collect::<Vec<String>>()
+        .connect(","));
 
     return Some(Command::Move(unvisited_valid_directions.into_iter().next().unwrap().0.clone()));
 }
