@@ -7,7 +7,8 @@ use rand::rngs::ThreadRng;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use log::{debug, info};
-use crate::helper::{direction_from_move, has_wall, move_by_direction};
+use crate::Answer::Pos;
+use crate::helper::{direction_from_move, distance_from_line, has_wall, move_by_direction};
 
 #[derive(Default)]
 pub struct State {
@@ -116,7 +117,8 @@ pub fn decide_action(state: &State, rng: &mut ThreadRng, config: &AlgorithmConfi
 
 fn calculate_position_heuristic(pos: &Position, goal: &Position, size: &Position, potential_way_length: Option<u32>, size_of_space: u32) -> f32 {
     let playground_diagonal = ((size.x as f32).powi(2) + (size.y as f32).powi(2)).sqrt();
-    let offset_from_diag = (pos.x as f32 - pos.y as f32).abs() / (playground_diagonal/2f32);
+    let playground_center = Position{ x: size.x / 2, y: size.y / 2 };
+    let offset_from_center_goal_line = distance_from_line(pos, &playground_center, goal) / playground_diagonal;
     let distance_to_goal = helper::calculate_distance(pos, goal) / playground_diagonal;
     let way_length = match potential_way_length {
         Some(len) => (len as f32 / (8.0 * size.x as f32 + 8.0 * size.y as f32)).sqrt(),
@@ -124,7 +126,7 @@ fn calculate_position_heuristic(pos: &Position, goal: &Position, size: &Position
     };
     debug!("goal: {}, way: {}, space: {}", distance_to_goal, way_length, size_of_space);
 
-    0.5 * distance_to_goal + 0.5 * way_length / (size_of_space as f32).sqrt()
+    0.5 * distance_to_goal + 0.5 * way_length / (size_of_space as f32).sqrt() + 0.1 * offset_from_center_goal_line
 }
 
 
