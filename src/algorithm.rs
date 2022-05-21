@@ -84,7 +84,7 @@ pub fn decide_action(state: &mut State, rng: &mut ThreadRng, config: &AlgorithmC
             let p = move_by_direction(pos, d);
             let (way, size_of_space) = explore_space_to_goal(&p, &size, &state.visited_positions, goal);
             debug!("Way length: {:?}, Size of Space: {}", way, size_of_space);
-            let heuristic = calculate_position_heuristic(&p, goal, &size, way, size_of_space);
+            let heuristic = calculate_position_heuristic(&p, goal, &size, way, size_of_space, config);
             (d, p, way.is_some(), heuristic)
         })
         .filter(|(_d, _pos, way, _heuristic)| { *way })
@@ -130,7 +130,7 @@ pub fn decide_action(state: &mut State, rng: &mut ThreadRng, config: &AlgorithmC
     return Some(Command::Move(unvisited_valid_directions[0].0.clone()));
 }
 
-fn calculate_position_heuristic(pos: &Position, goal: &Position, size: &Position, potential_way_length: Option<u32>, size_of_space: u32) -> f32 {
+fn calculate_position_heuristic(pos: &Position, goal: &Position, size: &Position, potential_way_length: Option<u32>, size_of_space: u32, config: &AlgorithmConfig) -> f32 {
     let playground_diagonal = ((size.x as f32).powi(2) + (size.y as f32).powi(2)).sqrt();
     let playground_center = Position{ x: size.x / 2, y: size.y / 2 };
     let offset_from_center_goal_line = distance_from_line(pos, &playground_center, goal) / playground_diagonal;
@@ -141,9 +141,9 @@ fn calculate_position_heuristic(pos: &Position, goal: &Position, size: &Position
     };
     debug!("goal: {}, way: {}, space: {}", distance_to_goal, way_length, size_of_space);
 
-    0.5 * distance_to_goal
-    + 0.5 * way_length / (size_of_space as f32).sqrt()
-    + 0.1 * offset_from_center_goal_line
+    config.koeff_goal_distance * distance_to_goal
+    + config.koeff_space * way_length / (size_of_space as f32).sqrt()
+    + config.koeff_center_line_offset * offset_from_center_goal_line
 }
 
 

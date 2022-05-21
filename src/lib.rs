@@ -49,6 +49,9 @@ pub struct AlgorithmConfig {
     heuristic_cut: f32,
     heuristic_decline_cut: f32,
     heuristic_decline_length: u32,
+    koeff_goal_distance: f32,
+    koeff_space: f32,
+    koeff_center_line_offset: f32,
 }
 
 #[derive(Deserialize)]
