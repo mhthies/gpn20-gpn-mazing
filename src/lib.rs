@@ -73,17 +73,22 @@ pub fn game_loop(config: &Config, stream: &mut TcpStream, stream_reader: &mut Bu
     info!("Starting game loop.");
     loop {
         if let Some(answer) = client::get_answer(stream_reader)? {
-            match answer {
+            match &answer {
                 Answer::Motd(msg) => {
                     warn!("Message of the day: {}", msg);
                 },
                 Answer::Error(msg) => {
                     warn!("Error from Server: {}", msg);
                 },
-                _ => {
-                    state.update_from_answer(&answer);
+                Answer::Win(_, _) => {
+                    warn!("We won!");
                 },
+                Answer::Lose(_, _) => {
+                    warn!("We lost!");
+                },
+                _ => {},
             }
+            state.update_from_answer(&answer);
         }
         if let Some(command) = decide_action(&state, rng, &config.algorithm) {
             client::send_command(stream, &command)?;
