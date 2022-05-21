@@ -75,6 +75,7 @@ pub fn decide_action(state: &State, rng: &mut ThreadRng, config: &AlgorithmConfi
             let (way, size_of_space) = explore_space_for_goal(&p, &size, &state.visited_positions, goal);
             debug!("Way length: {:?}, Size of Space: {}", way, size_of_space);
             let heuristic = calculate_position_heuristic(&p, goal, &size, way, size_of_space);
+            info!("Heuristic is {}", heuristic);
             (d, p, way.is_some(), heuristic)
         })
         .filter(|(_d, _pos, way, _heuristic)| { *way })
@@ -115,7 +116,7 @@ fn calculate_position_heuristic(pos: &Position, goal: &Position, size: &Position
         Some(len) => (len as f32 / (8.0 * size.x as f32 + 8.0 * size.y as f32)).sqrt(),
         None => 1.0,
     };
-    info!("Goal: {}, Diag: {}, way: {}", offset_from_diag, distance_to_goal, way_length);
+    debug!("goal: {}, way: {}, space: {}", distance_to_goal, way_length, size_of_space);
 
     0.5 * distance_to_goal + 0.5 * way_length / (size_of_space as f32).sqrt()
 }
