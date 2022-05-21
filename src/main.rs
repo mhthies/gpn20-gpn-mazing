@@ -37,7 +37,7 @@ fn get_connection(config: &ServerConfig) -> TcpStream {
     loop {
         match TcpStream::connect(&config.address) {
             Ok(s) => return s,
-            Err(e) => println!("{}", e)
+            Err(e) => error!("Could not connect: {}", e)
         }
         thread::sleep(time::Duration::from_millis(200));
     }
