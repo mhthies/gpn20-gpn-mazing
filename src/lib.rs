@@ -47,6 +47,8 @@ struct UserConfig {
 #[derive(Deserialize)]
 pub struct AlgorithmConfig {
     heuristic_cut: f32,
+    heuristic_decline_cut: f32,
+    heuristic_decline_length: u32,
 }
 
 #[derive(Deserialize)]
@@ -90,7 +92,7 @@ pub fn game_loop(config: &Config, stream: &mut TcpStream, stream_reader: &mut Bu
             }
             state.update_from_answer(&answer);
         }
-        if let Some(command) = decide_action(&state, rng, &config.algorithm) {
+        if let Some(command) = decide_action(&mut state, rng, &config.algorithm) {
             client::send_command(stream, &command)?;
         }
     }
