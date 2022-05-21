@@ -52,6 +52,7 @@ pub struct AlgorithmConfig {
     koeff_goal_distance: f32,
     koeff_space: f32,
     koeff_center_line_offset: f32,
+    invert_at_first_steps: f32,
 }
 
 #[derive(Deserialize)]

@@ -19,6 +19,7 @@ pub struct State {
     current_walls: Option<Walls>,
     visited_positions: HashMap<Position, Option<Position>>,
     heuristics_stack: Vec<f32>,
+    count_steps: u32,
 }
 
 impl State {
@@ -55,6 +56,7 @@ impl State {
         self.game_size = None;
         self.visited_positions.clear();
         self.heuristics_stack.clear();
+        self.count_steps = 0;
     }
 }
 
@@ -76,27 +78,27 @@ pub fn decide_action(state: &mut State, rng: &mut ThreadRng, config: &AlgorithmC
 
     let valid_directions: Vec<(&MoveDirection, Position, bool, f32)> =
         [MoveDirection::Up, MoveDirection::Right, MoveDirection::Down, MoveDirection::Left]
-        .iter()
-        .filter(|d| {
-            !has_wall(walls, d)
-        })
-        .map(|d| {
-            let p = move_by_direction(pos, d);
-            let (way, size_of_space) = explore_space_to_goal(&p, &size, &state.visited_positions, goal);
-            debug!("Way length: {:?}, Size of Space: {}", way, size_of_space);
-            let heuristic = calculate_position_heuristic(&p, goal, &size, way, size_of_space, config);
-            (d, p, way.is_some(), heuristic)
-        })
-        .filter(|(_d, _pos, way, _heuristic)| { *way })
-        .filter(|(_d, _pos, _way, heuristic)| *heuristic <= config.heuristic_cut)
-        .filter(|(_d, _pos, _way, heuristic)| {
-            let pass = *heuristic <= config.heuristic_decline_cut * recent_minimal_heuristic;
-            if !pass { warn!("Cutting here, old heuristic is better: {} < {}.", recent_minimal_heuristic, heuristic) }
-            pass
-        })
-        .collect();
+            .iter()
+            .filter(|d| {
+                !has_wall(walls, d)
+            })
+            .map(|d| {
+                let p = move_by_direction(pos, d);
+                let (way, size_of_space) = explore_space_to_goal(&p, &size, &state.visited_positions, goal);
+                debug!("Way length: {:?}, Size of Space: {}", way, size_of_space);
+                let heuristic = calculate_position_heuristic(&p, goal, &size, way, size_of_space, config);
+                (d, p, way.is_some(), heuristic)
+            })
+            .filter(|(_d, _pos, way, _heuristic)| { *way })
+            .filter(|(_d, _pos, _way, heuristic)| *heuristic <= config.heuristic_cut)
+            .filter(|(_d, _pos, _way, heuristic)| {
+                let pass = *heuristic <= config.heuristic_decline_cut * recent_minimal_heuristic;
+                if !pass { warn!("Cutting here, old heuristic is better: {} < {}.", recent_minimal_heuristic, heuristic) }
+                pass
+            })
+            .collect();
     // debug!("Valid directions: {:?}", valid_directions);
-    let mut unvisited_valid_directions:Vec<(&MoveDirection, Position, bool, f32)> = valid_directions.iter()
+    let mut unvisited_valid_directions: Vec<(&MoveDirection, Position, bool, f32)> = valid_directions.iter()
         .filter(|(_d, pos, _way, _heuristic)| {
             !state.visited_positions.contains_key(pos)
         })
@@ -108,6 +110,7 @@ pub fn decide_action(state: &mut State, rng: &mut ThreadRng, config: &AlgorithmC
         if let Some(back_pos) = back {
             info!("Stepping backwards");
             state.heuristics_stack.pop();
+            state.count_steps += 1;
             return Some(Command::Move(direction_from_move(pos, &back_pos)));
         } else {
             info!("No way for stepping backwards. Game seems to be over?");
@@ -118,6 +121,10 @@ pub fn decide_action(state: &mut State, rng: &mut ThreadRng, config: &AlgorithmC
     unvisited_valid_directions.sort_by(|a, b| {
         a.3.partial_cmp(&b.3).unwrap_or(Equal)
     });
+    if (state.count_steps as f32) < config.invert_at_first_steps * size.x as f32 {
+        info!("Inverting heuristic.");
+        unvisited_valid_directions.reverse();
+    }
     info!("Heuristic: {}", unvisited_valid_directions[0].3);
     debug!("All heuristics: [{}]",
         unvisited_valid_directions.iter()
@@ -126,6 +133,7 @@ pub fn decide_action(state: &mut State, rng: &mut ThreadRng, config: &AlgorithmC
         })
         .collect::<Vec<String>>()
         .connect(","));
+    state.count_steps += 1;
     state.heuristics_stack.push(unvisited_valid_directions[0].3);
     return Some(Command::Move(unvisited_valid_directions[0].0.clone()));
 }

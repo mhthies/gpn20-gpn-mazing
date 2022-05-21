@@ -12,3 +12,5 @@ heuristic_decline_length = 5
 koeff_goal_distance = 0.5
 koeff_space = 0.5
 koeff_center_line_offset = 0.1
+# ratio of playground width
+invert_at_first_steps = 0.1
