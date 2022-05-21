@@ -1,4 +1,4 @@
-use std::fs;
+use std::{env, fs};
 use std::io::{BufReader};
 use log::{error};
 use gpn20_maze::{Config, MoveDirection, Position, Walls};
@@ -7,8 +7,9 @@ mod helper;
 
 fn main() {
     env_logger::init();
+    let args: Vec<String> = env::args().collect();
+    let config_file = if args.len() > 1 { &args[1] } else { "config.toml" };
 
-    let config_file = "config.toml";
     let config_string = fs::read_to_string(config_file).unwrap();
     let config: Config = toml::from_str(&config_string).unwrap();
     let mut rng = rand::thread_rng();
