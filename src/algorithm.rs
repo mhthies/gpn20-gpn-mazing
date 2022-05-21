@@ -4,10 +4,9 @@ use core::option::Option::{None, Some};
 use crate::{AlgorithmConfig, helper, MoveDirection, Position, Walls};
 use crate::client::{Answer, Command};
 use rand::rngs::ThreadRng;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::collections::HashSet;
-use log::{debug, info};
-use crate::Answer::Pos;
+use log::{debug, info, warn};
 use crate::helper::{direction_from_move, distance_from_line, has_wall, move_by_direction};
 
 #[derive(Default)]
@@ -140,22 +139,22 @@ fn calculate_position_heuristic(pos: &Position, goal: &Position, size: &Position
     };
     debug!("goal: {}, way: {}, space: {}", distance_to_goal, way_length, size_of_space);
 
-    0.5 * distance_to_goal + 0.5 * way_length / (size_of_space as f32).sqrt() + 0.1 * offset_from_center_goal_line
+    0.5 * distance_to_goal
+    + 0.5 * way_length / (size_of_space as f32).sqrt()
+    + 0.1 * offset_from_center_goal_line
 }
 
 
-fn explore_space_for_goal(position: &Position, size: &Position, visited: &HashMap<Position, Option<Position>>, goal: &Position) -> (Option<u32>, u32) {
-    let mut search_stack = vec![(position.clone(), 0)];
+fn explore_space_to_goal(position: &Position, size: &Position, visited: &HashMap<Position, Option<Position>>, goal: &Position) -> (Option<u32>, u32) {
+    let mut search_stack = VecDeque::from(vec![(position.clone(), 0)]);
     let mut search_set: HashSet<Position> = HashSet::new();
 
-    let mut way_to_goal: Option<u32> = None;
-    while let Some((pos, count)) = search_stack.pop() {
-        if pos == *goal {
-            if way_to_goal.is_none() || way_to_goal.unwrap() > count + 1 {
-                way_to_goal.replace(count + 1);
-            }
-        }
+    while let Some((pos, count)) = search_stack.pop_front() {
         search_set.insert(pos.clone());
+        if pos == *goal {
+            let size_of_space = search_set.len() as u32;
+            return (Some(count), size_of_space);
+        }
         let search_positions = [
             MoveDirection::Up, MoveDirection::Right, MoveDirection::Down, MoveDirection::Left
         ].iter()
@@ -164,9 +163,9 @@ fn explore_space_for_goal(position: &Position, size: &Position, visited: &HashMa
             .filter(|p| !search_set.contains(p))
             .filter(|p| !visited.contains_key(p));
         for p in search_positions {
-            search_stack.push((p, count + 1));
+            search_stack.push_back((p, count + 1));
         }
     }
     let size_of_space = search_set.len() as u32;
-    return (way_to_goal, size_of_space);
+    return (None, size_of_space);
 }
