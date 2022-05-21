@@ -220,7 +220,8 @@ fn decide_action(state: &State, rng: &mut ThreadRng, config: &AlgorithmConfig) -
     let walls = state.current_walls.as_ref().unwrap();
     let pos = state.current_pos.as_ref().unwrap();
     let goal = state.current_goal.as_ref().unwrap();
-    let size = state.start_pos.as_ref().unwrap();
+    let start = state.start_pos.as_ref().unwrap();
+    let size = Position{ x: start.y, y: start.y };
 
     let valid_directions: Vec<(&MoveDirection, Position, Option<u32>, f32)> =
         [MoveDirection::Up, MoveDirection::Right, MoveDirection::Down, MoveDirection::Left]
@@ -230,9 +231,9 @@ fn decide_action(state: &State, rng: &mut ThreadRng, config: &AlgorithmConfig) -
         })
         .map(|d| {
             let p = move_by_direction(pos, d);
-            let way = possible_way_to_goal(&p, size, &state.visited_positions, goal);
+            let way = possible_way_to_goal(&p, &size, &state.visited_positions, goal);
             info!("Way length: {:?}", way);
-            let heuristic = calculate_position_heuristic(&p, goal, size, way);
+            let heuristic = calculate_position_heuristic(&p, goal, &size, way);
             (d, p, way, heuristic)
         })
         .filter(|(_d, _pos, way, _heuristic)| {
