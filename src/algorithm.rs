@@ -15,6 +15,7 @@ pub struct State {
     start_pos: Option<Position>,
     current_pos: Option<Position>,
     current_goal: Option<Position>,
+    game_size: Option<Position>,
     current_walls: Option<Walls>,
     visited_positions: HashMap<Position, Option<Position>>,
     heuristics_stack: Vec<f32>,
@@ -37,9 +38,10 @@ impl State {
                     debug!("Current walls: {:?}", self.current_walls.as_ref().unwrap());
                 }
             },
-            Answer::Goal(p) => {
+            Answer::Game(size, goal) => {
                 self.reset();
-                self.current_goal.replace(p.clone());
+                self.game_size.replace(size.clone());
+                self.current_goal.replace(goal.clone());
             },
             _ => {},
         }
@@ -50,6 +52,7 @@ impl State {
         self.last_pos = None;
         self.current_walls = None;
         self.current_goal = None;
+        self.game_size = None;
         self.visited_positions.clear();
         self.heuristics_stack.clear();
     }
@@ -63,8 +66,7 @@ pub fn decide_action(state: &mut State, rng: &mut ThreadRng, config: &AlgorithmC
     let walls = state.current_walls.as_ref().unwrap();
     let pos = state.current_pos.as_ref().unwrap();
     let goal = state.current_goal.as_ref().unwrap();
-    let start = state.start_pos.as_ref().unwrap();
-    let size = Position{ x: start.y, y: start.y };
+    let size = state.game_size.as_ref().unwrap();
 
     let recent_minimal_heuristic = state.heuristics_stack.iter()
         .rev()

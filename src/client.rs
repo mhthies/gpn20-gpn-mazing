@@ -17,6 +17,7 @@ pub enum Answer {
     Pos(Position, Walls),
     Win(u32, u32),
     Lose(u32, u32),
+    Game(Position, Position),
 }
 
 pub fn get_answer(reader: &mut BufReader<TcpStream>) -> io::Result<Option<Answer>> {
@@ -52,6 +53,18 @@ pub fn get_answer(reader: &mut BufReader<TcpStream>) -> io::Result<Option<Answer
         "lose" => {
             Some(Answer::Lose(parts.next().unwrap_or("0").parse().unwrap_or(0),
                               parts.next().unwrap_or("0").parse().unwrap_or(0)))
+        },
+        "game" => {
+            Some(Answer::Game(
+                Position {
+                    x: parts.next().unwrap_or("0").parse().unwrap_or(0),
+                    y: parts.next().unwrap_or("0").parse().unwrap_or(0)
+                },
+                Position {
+                    x: parts.next().unwrap_or("0").parse().unwrap_or(0),
+                    y: parts.next().unwrap_or("0").parse().unwrap_or(0)
+                },
+            ))
         },
         "" => { None },
         x => {
