@@ -222,29 +222,32 @@ fn decide_action(state: &State, rng: &mut ThreadRng, config: &AlgorithmConfig) -
     let goal = state.current_goal.as_ref().unwrap();
     let size = state.start_pos.as_ref().unwrap();
 
-    let valid_directions: Vec<&MoveDirection> =
+    let valid_directions: Vec<(&MoveDirection, Position, Option<u32>, f32)> =
         [MoveDirection::Up, MoveDirection::Right, MoveDirection::Down, MoveDirection::Left]
         .iter()
         .filter(|d| {
             !has_wall(walls, d)
         })
-        .filter(|d| {
-            may_have_way_to_goal(
-                &move_by_direction(pos, d),
-                state.start_pos.as_ref().unwrap(),
-                &state.visited_positions,
-                state.current_goal.as_ref().unwrap())
+        .map(|d| {
+            let p = move_by_direction(pos, d);
+            let way = possible_way_to_goal(&p, size, &state.visited_positions, goal);
+            info!("Way length: {:?}", way);
+            let heuristic = calculate_position_heuristic(&p, goal, size, way);
+            (d, p, way, heuristic)
         })
-        .filter(|d| calculate_position_heuristic(&move_by_direction(pos, d), goal, size) <= config.heuristic_cut)
-        .collect();
-    debug!("Valid directions: {:?}", valid_directions);
-    let mut unvisited_valid_directions: Vec<&MoveDirection> = valid_directions.iter()
-        .filter(|d| {
-            !state.visited_positions.contains_key(&move_by_direction(pos, d))
+        .filter(|(_d, _pos, way, _heuristic)| {
+            way.is_some()
         })
-        .map(|d| *d)
+        .filter(|(_d, _pos, _way, heuristic)| *heuristic <= config.heuristic_cut)
         .collect();
-    debug!("Unvisited directions: {:?}", unvisited_valid_directions);
+    // debug!("Valid directions: {:?}", valid_directions);
+    let mut unvisited_valid_directions:Vec<(&MoveDirection, Position, Option<u32>, f32)> = valid_directions.iter()
+        .filter(|(_d, pos, _way, _heuristic)| {
+            !state.visited_positions.contains_key(pos)
+        })
+        .map(|d| d.clone())
+        .collect();
+    // debug!("Unvisited directions: {:?}", unvisited_valid_directions);
     if unvisited_valid_directions.is_empty() {
         let back = state.visited_positions.get(pos).unwrap();
         if let Some(back_pos) = back {
@@ -257,12 +260,11 @@ fn decide_action(state: &State, rng: &mut ThreadRng, config: &AlgorithmConfig) -
     }
 
     unvisited_valid_directions.sort_by(|a, b| {
-        calculate_position_heuristic(&move_by_direction(pos, a), goal, size)
-            .partial_cmp(&calculate_position_heuristic(&move_by_direction(pos, b), goal, size))
-            .unwrap_or(Equal)
+        a.3.partial_cmp(&b.3).unwrap_or(Equal)
     });
+    info!("Heuristic: {}", unvisited_valid_directions[0].3);
 
-    return Some(Command::Move(unvisited_valid_directions.into_iter().next().unwrap().clone()));
+    return Some(Command::Move(unvisited_valid_directions.into_iter().next().unwrap().0.clone()));
 }
 
 fn move_by_direction(pos: &Position, dir: &MoveDirection) -> Position {
@@ -310,22 +312,28 @@ fn calculate_distance(pos1: &Position, pos2: &Position) -> f32 {
     ((pos1.x as f32 - pos2.x as f32).powi(2) + (pos1.y as f32 - pos2.y as f32).powi(2)).sqrt()
 }
 
-fn calculate_position_heuristic(pos: &Position, goal: &Position, size: &Position) -> f32 {
+fn calculate_position_heuristic(pos: &Position, goal: &Position, size: &Position, potential_way_length: Option<u32>) -> f32 {
     let playground_diagonal = ((size.x as f32).powi(2) + (size.y as f32).powi(2)).sqrt();
     let offset_from_diag = (pos.x as f32 - pos.y as f32).abs() / (playground_diagonal/2f32);
     let distance_to_goal = calculate_distance(pos, goal) / playground_diagonal;
-    (offset_from_diag + distance_to_goal) / 2f32
+    let way_length = match potential_way_length {
+        Some(len) => (len as f32 / (8.0 * size.x as f32 + 8.0 * size.y as f32)).sqrt(),
+        None => 1.0,
+    };
+    info!("Goal: {}, Diag: {}, way: {}", offset_from_diag, distance_to_goal, way_length);
+
+    distance_to_goal * 0.5 + way_length * 0.5
 }
 
 
-fn may_have_way_to_goal(position: &Position, size: &Position, visited: &HashMap<Position, Option<Position>>, goal: &Position) -> bool {
+fn possible_way_to_goal(position: &Position, size: &Position, visited: &HashMap<Position, Option<Position>>, goal: &Position) -> Option<u32> {
     if position == goal {
-        return true;
+        return Some(0);
     }
-    let mut search_stack = vec![position.clone()];
+    let mut search_stack = vec![(position.clone(), 0)];
     let mut search_set: HashSet<Position> = HashSet::new();
 
-    while let Some(pos) = search_stack.pop() {
+    while let Some((pos, count)) = search_stack.pop() {
         search_set.insert(pos.clone());
         let search_positions = [
             MoveDirection::Up, MoveDirection::Right, MoveDirection::Down, MoveDirection::Left
@@ -336,10 +344,10 @@ fn may_have_way_to_goal(position: &Position, size: &Position, visited: &HashMap<
             .filter(|p| !visited.contains_key(p));
         for pos in search_positions {
             if pos == *goal {
-                return true;
+                return Some(count + 1);
             }
-            search_stack.push(pos);
+            search_stack.push((pos, count + 1));
         }
     }
-    return false;
+    return None;
 }
