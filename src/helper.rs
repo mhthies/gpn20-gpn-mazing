@@ -12,8 +12,8 @@ pub fn move_by_direction(pos: &Position, dir: &MoveDirection) -> Position {
 pub fn is_move_over_playground_border(pos: &Position, dir: &MoveDirection, size: &Position) -> bool {
     match dir {
         MoveDirection::Up => pos.y == 0,
-        MoveDirection::Right => pos.x >= size.x,
-        MoveDirection::Down => pos.y >= size.y,
+        MoveDirection::Right => pos.x >= size.x - 1,
+        MoveDirection::Down => pos.y >= size.y - 1,
         MoveDirection::Left => pos.x == 0,
     }
 }
