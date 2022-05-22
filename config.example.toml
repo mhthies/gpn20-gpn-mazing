@@ -7,10 +7,13 @@ password = "password"
 
 [algorithm]
 heuristic_cut = 1.2
-heuristic_decline_cut = 1.5
-heuristic_decline_length = 5
+
+# Is not really helpful at the moment, thus effectively disabled
+heuristic_decline_cut = inf
+heuristic_decline_length = 1
+
 koeff_goal_distance = 0.5
-koeff_space = 0.5
+koeff_space = 0.4
 koeff_center_line_offset = 0.1
 # ratio of playground width
 invert_at_first_steps = 0.1
